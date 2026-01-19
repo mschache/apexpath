@@ -585,20 +585,20 @@ export default function AIPlanner() {
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
             <div className="p-4 rounded-lg bg-dark-700/50">
               <p className="text-xs text-gray-400 uppercase tracking-wider">Duration</p>
-              <p className="text-xl font-bold text-white">{generatedPlan.summary.totalWeeks} weeks</p>
+              <p className="text-xl font-bold text-white">{generatedPlan.summary?.totalWeeks ?? 0} weeks</p>
             </div>
             <div className="p-4 rounded-lg bg-dark-700/50">
               <p className="text-xs text-gray-400 uppercase tracking-wider">Total XSS</p>
-              <p className="text-xl font-bold text-strava-500">{Math.round(generatedPlan.summary.totalXss)}</p>
+              <p className="text-xl font-bold text-strava-500">{Math.round(generatedPlan.summary?.totalXss ?? 0)}</p>
             </div>
             <div className="p-4 rounded-lg bg-dark-700/50">
               <p className="text-xs text-gray-400 uppercase tracking-wider">Avg Hours/Week</p>
-              <p className="text-xl font-bold text-white">{generatedPlan.summary.avgWeeklyHours.toFixed(1)}h</p>
+              <p className="text-xl font-bold text-white">{generatedPlan.summary?.avgWeeklyHours?.toFixed(1) ?? '0'}h</p>
             </div>
             <div className="p-4 rounded-lg bg-dark-700/50">
               <p className="text-xs text-gray-400 uppercase tracking-wider">Predicted FTP</p>
               <p className="text-xl font-bold text-green-400">
-                {Math.round(generatedPlan.predictedFitness.thresholdPower)}W
+                {Math.round(generatedPlan.predictedFitness?.thresholdPower ?? 0)}W
               </p>
             </div>
           </div>
@@ -607,7 +607,7 @@ export default function AIPlanner() {
           <div className="mb-6">
             <h4 className="text-sm font-medium text-gray-400 mb-3">Training Phases</h4>
             <div className="flex gap-2">
-              {generatedPlan.summary.phases.map((phase, index) => (
+              {(generatedPlan.summary?.phases ?? []).map((phase, index) => (
                 <div
                   key={index}
                   className="flex-1 p-3 rounded-lg bg-dark-700/50 text-center"

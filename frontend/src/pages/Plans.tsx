@@ -516,7 +516,7 @@ export default function Plans() {
                     <div className="card bg-dark-700 p-4">
                       <p className="text-xs text-gray-400 uppercase tracking-wider">Duration</p>
                       <p className="text-xl font-bold text-white mt-1">
-                        {generatedPlan.summary.totalWeeks} weeks
+                        {generatedPlan.summary?.totalWeeks ?? 0} weeks
                       </p>
                     </div>
                     <div className="card bg-dark-700 p-4">
@@ -528,13 +528,13 @@ export default function Plans() {
                     <div className="card bg-dark-700 p-4">
                       <p className="text-xs text-gray-400 uppercase tracking-wider">Avg Weekly Hours</p>
                       <p className="text-xl font-bold text-white mt-1">
-                        {generatedPlan.summary.avgWeeklyHours.toFixed(1)}h
+                        {generatedPlan.summary?.avgWeeklyHours?.toFixed(1) ?? '0'}h
                       </p>
                     </div>
                     <div className="card bg-dark-700 p-4">
                       <p className="text-xs text-gray-400 uppercase tracking-wider">Total XSS</p>
                       <p className="text-xl font-bold text-strava-500 mt-1">
-                        {Math.round(generatedPlan.summary.totalXss)}
+                        {Math.round(generatedPlan.summary?.totalXss ?? 0)}
                       </p>
                     </div>
                   </div>
@@ -543,7 +543,7 @@ export default function Plans() {
                   <div>
                     <h4 className="text-sm font-medium text-gray-300 mb-3">Training Phases</h4>
                     <div className="flex gap-2 flex-wrap">
-                      {generatedPlan.summary.phases.map((phase, i) => (
+                      {(generatedPlan.summary?.phases ?? []).map((phase, i) => (
                         <div key={i} className="px-3 py-1.5 bg-dark-700 rounded-lg text-sm">
                           <span className="text-white font-medium">{phase.name}</span>
                           <span className="text-gray-400 ml-2">({phase.weeks} weeks)</span>
@@ -559,19 +559,19 @@ export default function Plans() {
                       <div>
                         <p className="text-xs text-gray-400">Threshold Power</p>
                         <p className="text-lg font-bold text-white">
-                          {Math.round(generatedPlan.predictedFitness.thresholdPower)}W
+                          {Math.round(generatedPlan.predictedFitness?.thresholdPower ?? 0)}W
                         </p>
                       </div>
                       <div>
                         <p className="text-xs text-gray-400">Peak Power</p>
                         <p className="text-lg font-bold text-white">
-                          {Math.round(generatedPlan.predictedFitness.peakPower)}W
+                          {Math.round(generatedPlan.predictedFitness?.peakPower ?? 0)}W
                         </p>
                       </div>
                       <div>
                         <p className="text-xs text-gray-400">HIE</p>
                         <p className="text-lg font-bold text-white">
-                          {generatedPlan.predictedFitness.highIntensityEnergy.toFixed(1)} kJ
+                          {generatedPlan.predictedFitness?.highIntensityEnergy?.toFixed(1) ?? '0'} kJ
                         </p>
                       </div>
                     </div>
