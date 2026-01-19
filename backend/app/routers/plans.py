@@ -37,7 +37,7 @@ router = APIRouter()
 
 # ============== Plan CRUD Endpoints ==============
 
-@router.get("/", response_model=List[TrainingPlanSummary])
+@router.get("", response_model=List[TrainingPlanSummary])
 async def list_plans(
     skip: int = Query(0, ge=0),
     limit: int = Query(20, ge=1, le=100),
@@ -130,7 +130,7 @@ async def get_plan(
     return plan
 
 
-@router.post("/", response_model=TrainingPlanResponse, status_code=status.HTTP_201_CREATED)
+@router.post("", response_model=TrainingPlanResponse, status_code=status.HTTP_201_CREATED)
 async def create_plan(
     plan_data: TrainingPlanCreate,
     db: Session = Depends(get_db),

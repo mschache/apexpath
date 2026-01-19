@@ -39,7 +39,7 @@ def calculate_ewma_factor(time_constant: int) -> float:
     return 2.0 / (time_constant + 1)
 
 
-@router.get("/", response_model=List[FitnessMetricResponse])
+@router.get("", response_model=List[FitnessMetricResponse])
 async def list_metrics(
     from_date: Optional[date] = Query(None, description="Start date for metrics"),
     to_date: Optional[date] = Query(None, description="End date for metrics"),
