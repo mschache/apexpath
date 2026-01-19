@@ -2,7 +2,7 @@
 
 from datetime import date, datetime
 from enum import Enum
-from typing import Any, Optional
+from typing import Any, Optional, Union
 
 from pydantic import BaseModel, Field
 
@@ -12,7 +12,8 @@ from app.models.planned_workout import WorkoutType
 class ExportFormat(str, Enum):
     """Supported workout export formats."""
     ZWO = "zwo"  # Zwift Workout
-    MRC = "mrc"  # Rouvy/ErgVideo
+    MRC = "mrc"  # Rouvy/ErgVideo/MyWhoosh
+    ERG = "erg"  # Wahoo/Garmin (absolute watts)
 
 
 class IntervalType(str, Enum):
@@ -79,9 +80,9 @@ class WorkoutResponse(BaseModel):
     workout_type: WorkoutType = Field(..., description="Type of workout")
     duration_minutes: int = Field(..., description="Duration in minutes")
     description: Optional[str] = Field(None, description="Workout description")
-    intervals_json: Optional[list[dict[str, Any]]] = Field(
+    intervals_json: Optional[Union[list[dict[str, Any]], dict[str, Any]]] = Field(
         None,
-        description="Structured workout intervals"
+        description="Structured workout intervals (list or dict with warmup/intervals/cooldown)"
     )
     target_tss: Optional[int] = Field(None, description="Target Training Stress Score")
     target_if: Optional[int] = Field(None, description="Target Intensity Factor (percentage)")

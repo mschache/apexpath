@@ -7,7 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import get_settings
 from app.database import create_tables
-from app.routers import auth, activities, metrics, plans, workouts, dashboard
+from app.routers import auth, activities, metrics, plans, workouts, dashboard, ai
 
 settings = get_settings()
 
@@ -33,6 +33,13 @@ app = FastAPI(
 cors_origins = [
     settings.FRONTEND_URL,
     "http://localhost:5173",
+    "http://localhost:5174",
+    "http://localhost:5175",
+    "http://localhost:5176",
+    "http://localhost:5177",
+    "http://localhost:5178",
+    "http://localhost:5179",
+    "http://localhost:5180",
     "http://localhost:3000",
 ]
 
@@ -52,6 +59,7 @@ app.include_router(metrics.router, prefix="/api/metrics", tags=["Fitness Metrics
 app.include_router(plans.router, prefix="/api/plans", tags=["Training Plans"])
 app.include_router(workouts.router, prefix="/api/workouts", tags=["Workouts"])
 app.include_router(dashboard.router, prefix="/api/dashboard", tags=["Dashboard"])
+app.include_router(ai.router, prefix="/api/ai", tags=["AI Training"])
 
 
 @app.get("/", tags=["Health"])

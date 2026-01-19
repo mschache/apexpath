@@ -27,6 +27,7 @@ router = APIRouter(tags=["workouts"])
 EXPORT_CONTENT_TYPES = {
     ExportFormat.ZWO: "application/xml",
     ExportFormat.MRC: "text/plain",
+    ExportFormat.ERG: "text/plain",
 }
 
 
@@ -62,6 +63,56 @@ async def get_upcoming_workouts(
         PlannedWorkout.date >= today,
         PlannedWorkout.completed == False
     ).order_by(PlannedWorkout.date).limit(limit).all()
+
+    return workouts
+
+
+@router.get("/calendar", response_model=List[WorkoutResponse])
+async def get_calendar_workouts(
+    start_date: date = Query(..., description="Start date for calendar range"),
+    end_date: date = Query(..., description="End date for calendar range"),
+    plan_id: Optional[int] = Query(None, description="Filter by specific plan ID"),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> List[PlannedWorkout]:
+    """
+    Get workouts for calendar view within a date range.
+
+    Returns all planned workouts for the authenticated user within the specified
+    date range. Optionally filter by plan ID.
+
+    Args:
+        start_date: Start of the date range (inclusive)
+        end_date: End of the date range (inclusive)
+        plan_id: Optional plan ID to filter workouts
+        current_user: The authenticated user
+        db: Database session
+
+    Returns:
+        List of workouts within the date range
+    """
+    from datetime import datetime
+    from app.models.training_plan import TrainingPlan
+
+    # Convert dates to datetime for comparison
+    start_datetime = datetime.combine(start_date, datetime.min.time())
+    end_datetime = datetime.combine(end_date, datetime.max.time())
+
+    # Build query
+    query = db.query(PlannedWorkout).join(
+        TrainingPlan, PlannedWorkout.plan_id == TrainingPlan.id
+    ).filter(
+        TrainingPlan.user_id == current_user.id,
+        PlannedWorkout.date >= start_datetime,
+        PlannedWorkout.date <= end_datetime
+    )
+
+    # Filter by plan ID if provided
+    if plan_id is not None:
+        query = query.filter(PlannedWorkout.plan_id == plan_id)
+
+    # Order by date
+    workouts = query.order_by(PlannedWorkout.date).all()
 
     return workouts
 
@@ -134,6 +185,8 @@ async def export_workout(
         content = export_service.export_to_zwo(workout, ftp)
     elif format == ExportFormat.MRC:
         content = export_service.export_to_mrc(workout, ftp)
+    elif format == ExportFormat.ERG:
+        content = export_service.export_to_erg(workout, ftp)
     else:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -187,6 +240,10 @@ async def get_export_metadata(
     # Generate content to calculate size
     if format == ExportFormat.ZWO:
         content = export_service.export_to_zwo(workout, ftp)
+    elif format == ExportFormat.MRC:
+        content = export_service.export_to_mrc(workout, ftp)
+    elif format == ExportFormat.ERG:
+        content = export_service.export_to_erg(workout, ftp)
     else:
         content = export_service.export_to_mrc(workout, ftp)
 

@@ -1,3 +1,9 @@
+// Experience level for training plans
+export type ExperienceLevel = 'beginner' | 'intermediate' | 'advanced' | 'elite';
+
+// Primary cycling discipline
+export type CyclingDiscipline = 'road' | 'mtb' | 'gravel' | 'track' | 'indoor';
+
 // User types
 export interface User {
   id: number;
@@ -6,11 +12,40 @@ export interface User {
   email?: string;
   ftp?: number;
   profile_image?: string;
-  // Optional additional fields
-  max_hr?: number;
+
+  // Physical attributes
   weight_kg?: number;
+  age?: number;
+  max_hr?: number;
+  resting_hr?: number;
+
+  // Training profile
+  experience_level?: ExperienceLevel;
+  primary_discipline?: CyclingDiscipline;
+  default_weekly_hours?: number;
+
+  // Equipment
+  has_power_meter?: boolean;
+  has_indoor_trainer?: boolean;
+
+  // Timestamps
   created_at?: string;
   updated_at?: string;
+}
+
+// User update payload (for PATCH /auth/me)
+export interface UserUpdate {
+  ftp?: number;
+  name?: string;
+  weight_kg?: number;
+  age?: number;
+  max_hr?: number;
+  resting_hr?: number;
+  experience_level?: ExperienceLevel;
+  primary_discipline?: CyclingDiscipline;
+  default_weekly_hours?: number;
+  has_power_meter?: boolean;
+  has_indoor_trainer?: boolean;
 }
 
 // Activity types
@@ -281,3 +316,224 @@ export const POWER_ZONES_COGGAN: PowerZoneData[] = [
 
 // Utility type for form handling
 export type FormErrors<T> = Partial<Record<keyof T, string>>;
+
+// --- AI Training Planner Types ---
+
+// Fitness Signature (3-parameter model)
+export interface FitnessSignature {
+  id?: number;
+  userId?: number;
+  date?: string;
+  thresholdPower: number;      // TP - watts
+  highIntensityEnergy: number; // HIE - kJ
+  peakPower: number;           // PP - watts
+  weightKg?: number;
+  source?: 'estimated' | 'breakthrough' | 'manual';
+}
+
+// 3D Training Load
+export interface TrainingLoad3D {
+  low: number;   // Low (aerobic) system
+  high: number;  // High (anaerobic) system
+  peak: number;  // Peak (neuromuscular) system
+}
+
+// XSS Breakdown
+export interface XSSBreakdown {
+  total: number;
+  low: number;
+  high: number;
+  peak: number;
+}
+
+// Training Status
+export type TrainingStatus = 'fresh' | 'tired' | 'very_tired' | 'very_fresh' | 'detraining';
+
+// Day Availability for scheduling
+export interface DayAvailability {
+  available: boolean;
+  startTime?: string;  // HH:MM format
+  duration: number;    // minutes
+}
+
+// Athlete Context for AI
+export interface AthleteContext {
+  userId: number;
+  ftp: number;
+  signature: FitnessSignature;
+  trainingLoad: TrainingLoad3D;
+  recoveryLoad: TrainingLoad3D;
+  form: TrainingLoad3D;
+  status: TrainingStatus;
+  weeklyXssAverage: number;
+}
+
+// Forecast Configuration
+export interface ForecastConfig {
+  programType: 'goal' | 'event' | 'race';
+  targetDate: string;
+  maxWeeklyHours: number;
+  eventReadiness: number;      // 1-5
+  periodizationLevel: number;  // 0-100 (0=early base, 100=race peak)
+  polarizationRatio: string;   // e.g., "80/20"
+  recoveryDemands: number;     // 0-100 (0=aggressive, 100=conservative)
+  availableDays: Record<string, DayAvailability>;
+}
+
+// Default availability for all days
+export const DEFAULT_AVAILABILITY: Record<string, DayAvailability> = {
+  Monday: { available: true, duration: 60 },
+  Tuesday: { available: true, duration: 60 },
+  Wednesday: { available: true, duration: 60 },
+  Thursday: { available: true, duration: 60 },
+  Friday: { available: true, duration: 60 },
+  Saturday: { available: true, duration: 90 },
+  Sunday: { available: true, duration: 90 },
+};
+
+// Planned Workout Summary from AI
+export interface AIPlannedWorkout {
+  date: string;
+  name: string;
+  workoutType: WorkoutType | string;
+  durationMinutes: number;
+  targetTss?: number;
+  targetXss?: XSSBreakdown;
+}
+
+// Plan Phase Info
+export interface PlanPhaseInfo {
+  name: string;
+  weeks: number;
+}
+
+// Plan Summary
+export interface PlanSummary {
+  totalWeeks: number;
+  totalXss: number;
+  avgWeeklyHours: number;
+  phases: PlanPhaseInfo[];
+}
+
+// Predicted Fitness at target date
+export interface PredictedFitness {
+  thresholdPower: number;
+  highIntensityEnergy: number;
+  peakPower: number;
+  trainingLoad: TrainingLoad3D;
+  form: TrainingLoad3D;
+}
+
+// Generated Plan Response
+export interface GeneratedPlanResponse {
+  planId: number;
+  workouts: AIPlannedWorkout[];
+  summary: PlanSummary;
+  predictedFitness: PredictedFitness;
+}
+
+// Training Load Record
+export interface TrainingLoadRecord {
+  id: number;
+  userId: number;
+  date: string;
+  tlLow: number;
+  tlHigh: number;
+  tlPeak: number;
+  rlLow: number;
+  rlHigh: number;
+  rlPeak: number;
+  formLow: number;
+  formHigh: number;
+  formPeak: number;
+  xssTotal: number;
+  xssLow: number;
+  xssHigh: number;
+  xssPeak: number;
+  status: TrainingStatus;
+}
+
+// Training Load History Response
+export interface TrainingLoadHistoryResponse {
+  records: TrainingLoadRecord[];
+  summary: {
+    avgWeeklyXss?: number;
+    peakTl?: TrainingLoad3D;
+    currentForm?: TrainingLoad3D;
+  };
+}
+
+// Adapt Plan Request
+export interface AdaptPlanRequest {
+  reason?: string;
+  maintainTargetDate?: boolean;
+}
+
+// Adapt Plan Response
+export interface AdaptPlanResponse {
+  message: string;
+  workoutsModified: number;
+  workoutsAdded: number;
+  workoutsRemoved: number;
+}
+
+// --- Workout Export Types ---
+
+// Export format for workout files
+export type ExportFormat = 'zwo' | 'mrc' | 'erg';
+
+// Cycling platform for export
+export interface CyclingPlatform {
+  id: string;
+  name: string;
+  format: ExportFormat;
+  icon: string;
+  description: string;
+}
+
+// Available cycling platforms for workout export
+export const CYCLING_PLATFORMS: CyclingPlatform[] = [
+  {
+    id: 'zwift',
+    name: 'Zwift',
+    format: 'zwo',
+    icon: '🚴',
+    description: 'Indoor cycling and running',
+  },
+  {
+    id: 'rouvy',
+    name: 'Rouvy',
+    format: 'mrc',
+    icon: '🏔️',
+    description: 'Virtual cycling with real video',
+  },
+  {
+    id: 'mywhoosh',
+    name: 'MyWhoosh',
+    format: 'mrc',
+    icon: '🌍',
+    description: 'Free indoor cycling platform',
+  },
+  {
+    id: 'wahoo',
+    name: 'Wahoo',
+    format: 'erg',
+    icon: '⚡',
+    description: 'Wahoo SYSTM / KICKR',
+  },
+  {
+    id: 'garmin',
+    name: 'Garmin',
+    format: 'erg',
+    icon: '📊',
+    description: 'Garmin Connect / Edge devices',
+  },
+];
+
+// Export response metadata
+export interface ExportMetadata {
+  filename: string;
+  format: ExportFormat;
+  content_type: string;
+  size_bytes: number;
+}

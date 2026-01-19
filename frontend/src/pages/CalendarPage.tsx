@@ -1,7 +1,14 @@
-import { useState, useCallback, useMemo } from 'react';
+import { useState, useCallback, useMemo, useEffect } from 'react';
 import { Calendar, momentLocalizer, Views, type View } from 'react-big-calendar';
 import moment from 'moment';
-import { format, addMonths, subMonths } from 'date-fns';
+import {
+  format,
+  addMonths,
+  subMonths,
+  startOfMonth,
+  endOfMonth,
+  parseISO,
+} from 'date-fns';
 import {
   ChevronLeft,
   ChevronRight,
@@ -11,110 +18,16 @@ import {
   Coffee,
   Zap,
   Target,
+  Download,
+  Loader2,
 } from 'lucide-react';
 import { useFitnessStore } from '../store/fitnessStore';
 import type { CalendarEvent, PlannedWorkout, Activity } from '../types';
+import api, { endpoints } from '../utils/api';
+import WorkoutExportModal from '../components/WorkoutExportModal';
 import 'react-big-calendar/lib/css/react-big-calendar.css';
 
 const localizer = momentLocalizer(moment);
-
-// Mock data for calendar
-const mockWorkouts: PlannedWorkout[] = [
-  {
-    id: 1,
-    plan_id: 1,
-    name: 'Sweet Spot Intervals',
-    description: '2x20 min at 88-93% FTP',
-    workout_type: 'sweetspot',
-    date: format(new Date(), 'yyyy-MM-dd'),
-    duration_minutes: 90,
-    target_tss: 75,
-    completed: false,
-    created_at: new Date().toISOString(),
-    updated_at: new Date().toISOString(),
-  },
-  {
-    id: 2,
-    plan_id: 1,
-    name: 'Endurance Ride',
-    description: '2 hour Z2 ride',
-    workout_type: 'endurance',
-    date: format(new Date(new Date().setDate(new Date().getDate() + 1)), 'yyyy-MM-dd'),
-    duration_minutes: 120,
-    target_tss: 85,
-    completed: false,
-    created_at: new Date().toISOString(),
-    updated_at: new Date().toISOString(),
-  },
-  {
-    id: 3,
-    plan_id: 1,
-    name: 'VO2max Intervals',
-    description: '5x4 min at 106-120% FTP',
-    workout_type: 'vo2max',
-    date: format(new Date(new Date().setDate(new Date().getDate() + 3)), 'yyyy-MM-dd'),
-    duration_minutes: 80,
-    target_tss: 95,
-    completed: false,
-    created_at: new Date().toISOString(),
-    updated_at: new Date().toISOString(),
-  },
-  {
-    id: 4,
-    plan_id: 1,
-    name: 'Recovery Spin',
-    description: '45 min easy spin',
-    workout_type: 'recovery',
-    date: format(new Date(new Date().setDate(new Date().getDate() + 4)), 'yyyy-MM-dd'),
-    duration_minutes: 45,
-    target_tss: 25,
-    completed: false,
-    created_at: new Date().toISOString(),
-    updated_at: new Date().toISOString(),
-  },
-  {
-    id: 5,
-    plan_id: 1,
-    name: 'Threshold Intervals',
-    description: '3x15 min at 95-105% FTP',
-    workout_type: 'threshold',
-    date: format(new Date(new Date().setDate(new Date().getDate() + 6)), 'yyyy-MM-dd'),
-    duration_minutes: 90,
-    target_tss: 88,
-    completed: false,
-    created_at: new Date().toISOString(),
-    updated_at: new Date().toISOString(),
-  },
-];
-
-const mockActivities: Activity[] = [
-  {
-    id: 101,
-    strava_id: 101,
-    user_id: 1,
-    name: 'Morning Tempo Ride',
-    activity_type: 'Ride',
-    date: new Date(Date.now() - 86400000).toISOString(),
-    distance_meters: 45200,
-    duration_seconds: 5400,
-    average_power: 185,
-    tss: 72,
-    created_at: new Date().toISOString(),
-  },
-  {
-    id: 102,
-    strava_id: 102,
-    user_id: 1,
-    name: 'Recovery Spin',
-    activity_type: 'Ride',
-    date: new Date(Date.now() - 172800000).toISOString(),
-    distance_meters: 25000,
-    duration_seconds: 3600,
-    average_power: 120,
-    tss: 35,
-    created_at: new Date().toISOString(),
-  },
-];
 
 function getWorkoutColor(workoutType: string): string {
   switch (workoutType) {
@@ -157,15 +70,53 @@ export default function CalendarPage() {
   const [currentDate, setCurrentDate] = useState(new Date());
   const [view, setView] = useState<View>(Views.MONTH);
   const [selectedEvent, setSelectedEvent] = useState<CalendarEvent | null>(null);
-  const { plannedWorkouts, activities } = useFitnessStore();
+  const [showExportModal, setShowExportModal] = useState(false);
+  const [workouts, setWorkouts] = useState<PlannedWorkout[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const { activities } = useFitnessStore();
+
+  // Fetch workouts for the current month
+  const fetchWorkouts = useCallback(async (date: Date) => {
+    setIsLoading(true);
+    setError(null);
+
+    try {
+      // Get start and end of the visible month range (with some buffer)
+      const startDate = format(
+        subMonths(startOfMonth(date), 1),
+        'yyyy-MM-dd'
+      );
+      const endDate = format(
+        addMonths(endOfMonth(date), 1),
+        'yyyy-MM-dd'
+      );
+
+      const response = await api.get<PlannedWorkout[]>(endpoints.workouts.calendar, {
+        params: { start_date: startDate, end_date: endDate },
+      });
+
+      setWorkouts(response.data);
+    } catch (err) {
+      console.error('Failed to fetch workouts:', err);
+      setError('Failed to load workouts');
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
+
+  // Fetch workouts when month changes
+  useEffect(() => {
+    fetchWorkouts(currentDate);
+  }, [currentDate, fetchWorkouts]);
 
   // Convert workouts and activities to calendar events
   const events: CalendarEvent[] = useMemo(() => {
-    const workoutEvents: CalendarEvent[] = mockWorkouts.map((workout) => ({
+    const workoutEvents: CalendarEvent[] = workouts.map((workout) => ({
       id: `workout-${workout.id}`,
       title: workout.name,
-      start: new Date(workout.date),
-      end: new Date(workout.date),
+      start: parseISO(workout.date),
+      end: parseISO(workout.date),
       allDay: true,
       resource: workout,
       type: 'workout' as const,
@@ -173,7 +124,7 @@ export default function CalendarPage() {
       color: getWorkoutColor(workout.workout_type),
     }));
 
-    const activityEvents: CalendarEvent[] = mockActivities.map((activity) => ({
+    const activityEvents: CalendarEvent[] = (activities || []).map((activity) => ({
       id: `activity-${activity.id}`,
       title: activity.name,
       start: new Date(activity.date),
@@ -185,7 +136,7 @@ export default function CalendarPage() {
     }));
 
     return [...workoutEvents, ...activityEvents];
-  }, [plannedWorkouts, activities]);
+  }, [workouts, activities]);
 
   // Custom event component
   const EventComponent = ({ event }: { event: CalendarEvent }) => {
@@ -222,6 +173,14 @@ export default function CalendarPage() {
     setSelectedEvent(null);
   };
 
+  const handleOpenExport = () => {
+    setShowExportModal(true);
+  };
+
+  const handleCloseExport = () => {
+    setShowExportModal(false);
+  };
+
   // Custom toolbar
   const CustomToolbar = () => (
     <div className="flex items-center justify-between mb-6">
@@ -249,6 +208,9 @@ export default function CalendarPage() {
             <ChevronRight className="w-5 h-5 text-gray-400" />
           </button>
         </div>
+        {isLoading && (
+          <Loader2 className="w-5 h-5 text-gray-400 animate-spin" />
+        )}
       </div>
 
       <div className="flex items-center gap-3">
@@ -292,6 +254,13 @@ export default function CalendarPage() {
           Plan and track your workouts
         </p>
       </div>
+
+      {/* Error message */}
+      {error && (
+        <div className="card p-4 border-red-500/30 bg-red-500/10">
+          <p className="text-red-400">{error}</p>
+        </div>
+      )}
 
       {/* Legend */}
       <div className="card p-4">
@@ -405,7 +374,13 @@ export default function CalendarPage() {
 
                   <div className="flex gap-3 mt-6">
                     <button className="btn-primary flex-1">Start Workout</button>
-                    <button className="btn-secondary flex-1">Edit</button>
+                    <button
+                      onClick={handleOpenExport}
+                      className="btn-secondary flex-1 flex items-center justify-center gap-2"
+                    >
+                      <Download className="w-4 h-4" />
+                      Export
+                    </button>
                   </div>
                 </div>
               )}
@@ -451,6 +426,14 @@ export default function CalendarPage() {
             </div>
           </div>
         </>
+      )}
+
+      {/* Export Modal */}
+      {showExportModal && selectedEvent?.type === 'workout' && selectedEvent.resource && (
+        <WorkoutExportModal
+          workout={selectedEvent.resource as PlannedWorkout}
+          onClose={handleCloseExport}
+        />
       )}
     </div>
   );

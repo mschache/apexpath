@@ -129,6 +129,118 @@ class ExportService:
         if cadence and "elem" in dir():
             elem.set("Cadence", str(cadence))
 
+    def export_to_erg(self, workout: PlannedWorkout, ftp: int) -> str:
+        """
+        Generate ERG format file for Wahoo/Garmin (.erg).
+
+        ERG uses absolute watts (not % of FTP) in a similar structure to MRC.
+        This format is compatible with Wahoo SYSTM, Wahoo KICKR, and Garmin.
+
+        Args:
+            workout: The planned workout to export
+            ftp: Athlete's FTP in watts (used to calculate absolute watts)
+
+        Returns:
+            String representing the ERG file
+
+        Example output:
+            [COURSE HEADER]
+            DESCRIPTION = Sweet Spot Intervals
+            FTP = 250
+            MINUTES WATTS
+            [END COURSE HEADER]
+            [COURSE DATA]
+            0.00	125
+            10.00	175
+            10.01	225
+            20.00	225
+            [END COURSE DATA]
+
+        First column: minutes from start
+        Second column: absolute watts
+        """
+        lines = []
+
+        # Header section
+        lines.append("[COURSE HEADER]")
+        lines.append(f"DESCRIPTION = {workout.description or workout.name}")
+        lines.append(f"FTP = {ftp}")
+        lines.append("MINUTES WATTS")
+        lines.append("[END COURSE HEADER]")
+
+        # Course data section
+        lines.append("[COURSE DATA]")
+
+        # Parse intervals and generate time/power pairs in absolute watts
+        segments = self._parse_intervals_json(workout.intervals_json)
+        data_points = self._generate_erg_data_points(segments, ftp)
+
+        for time_minutes, watts in data_points:
+            lines.append(f"{time_minutes:.2f}\t{watts}")
+
+        lines.append("[END COURSE DATA]")
+
+        return "\n".join(lines)
+
+    def _generate_erg_data_points(
+        self, segments: list[dict[str, Any]], ftp: int
+    ) -> list[tuple[float, int]]:
+        """
+        Generate time/power data points for ERG format in absolute watts.
+
+        Returns list of (time_in_minutes, watts) tuples.
+        """
+        data_points = []
+        current_time = 0.0
+
+        for segment in segments:
+            duration_seconds = segment["duration"]
+            duration_minutes = duration_seconds / 60.0
+            # Convert decimal FTP values to absolute watts
+            watts_low = int(segment["power_low"] * ftp)
+            watts_high = int(segment["power_high"] * ftp)
+            repeat = segment.get("repeat", 1)
+            interval_type = segment["type"]
+
+            for _ in range(repeat):
+                if interval_type in (IntervalType.WARMUP, IntervalType.RAMP):
+                    # Ramp from low to high
+                    data_points.append((current_time, watts_low))
+                    current_time += duration_minutes
+                    data_points.append((current_time, watts_high))
+
+                elif interval_type == IntervalType.COOLDOWN:
+                    # Ramp from high to low (reverse)
+                    data_points.append((current_time, watts_low))
+                    current_time += duration_minutes
+                    data_points.append((current_time, watts_high))
+
+                else:
+                    # Steady state - use the high power value
+                    # Add start point
+                    if not data_points or abs(data_points[-1][1] - watts_high) > 1:
+                        # Small offset to create step change
+                        if data_points:
+                            data_points.append((current_time + 0.01, watts_high))
+                        else:
+                            data_points.append((current_time, watts_high))
+                    else:
+                        data_points.append((current_time, watts_high))
+
+                    # Add end point
+                    current_time += duration_minutes
+                    data_points.append((current_time, watts_high))
+
+                # Handle rest intervals in work/rest pairs
+                if "off_duration" in segment:
+                    off_duration_minutes = segment["off_duration"] / 60.0
+                    off_watts = int(segment.get("off_power", 0.50) * ftp)
+                    data_points.append((current_time + 0.01, off_watts))
+                    current_time += off_duration_minutes
+                    data_points.append((current_time, off_watts))
+
+        return data_points
+
     def export_to_mrc(self, workout: PlannedWorkout, ftp: int) -> str:
         """
         Generate Rouvy/ErgVideo format (.mrc).

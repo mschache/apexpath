@@ -156,6 +156,10 @@ export const endpoints = {
     delete: (id: number) => `/workouts/${id}`,
     upcoming: '/workouts/upcoming',
     calendar: '/workouts/calendar',
+    export: (id: number) => `/workouts/${id}/export`,
+    exportMetadata: (id: number) => `/workouts/${id}/export/metadata`,
+    complete: (id: number) => `/workouts/${id}/complete`,
+    skip: (id: number) => `/workouts/${id}/skip`,
   },
 
   // Fitness metrics (using /metrics endpoint)
@@ -179,7 +183,19 @@ export const endpoints = {
     authorize: '/auth/strava/login/redirect',
     callback: '/auth/strava/callback',
     sync: '/activities/sync',
+    syncProfile: '/auth/strava/sync',
     status: '/auth/me',
+  },
+
+  // AI Training Planner
+  ai: {
+    context: '/ai/context',
+    generatePlan: '/ai/generate-plan',
+    adaptPlan: (planId: number) => `/ai/adapt-plan/${planId}`,
+    trainingLoadHistory: '/ai/training-load/history',
+    calculateTrainingLoad: '/ai/training-load/calculate',
+    estimateSignature: '/ai/fitness-signature/estimate',
+    calculateXss: '/ai/xss/calculate',
   },
 };
 
