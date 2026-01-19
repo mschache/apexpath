@@ -7,7 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import get_settings
 from app.database import create_tables
-from app.routers import auth, activities, metrics, plans, workouts
+from app.routers import auth, activities, metrics, plans, workouts, dashboard
 
 settings = get_settings()
 
@@ -51,6 +51,7 @@ app.include_router(activities.router, prefix="/api/activities", tags=["Activitie
 app.include_router(metrics.router, prefix="/api/metrics", tags=["Fitness Metrics"])
 app.include_router(plans.router, prefix="/api/plans", tags=["Training Plans"])
 app.include_router(workouts.router, prefix="/api/workouts", tags=["Workouts"])
+app.include_router(dashboard.router, prefix="/api/dashboard", tags=["Dashboard"])
 
 
 @app.get("/", tags=["Health"])

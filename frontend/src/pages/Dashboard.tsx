@@ -29,8 +29,8 @@ import {
 import { useAuthStore } from '../store/authStore';
 import { useFitnessStore } from '../store/fitnessStore';
 import { apiGet, apiPost, endpoints } from '../utils/api';
-import { format, formatDistanceToNow, subDays, startOfWeek } from 'date-fns';
-import type { Activity as ActivityType, FitnessMetric, PlannedWorkout, DashboardStats, FitnessChartData } from '../types';
+import { format, formatDistanceToNow, subDays } from 'date-fns';
+import type { Activity as ActivityType, FitnessMetric, PlannedWorkout, DashboardStats, FitnessChartData, DashboardSummaryResponse } from '../types';
 
 function formatDuration(seconds: number): string {
   const hours = Math.floor(seconds / 3600);
@@ -44,42 +44,6 @@ function formatDuration(seconds: number): string {
 function formatDistance(meters: number): string {
   const km = meters / 1000;
   return `${km.toFixed(1)} km`;
-}
-
-// Calculate weekly stats from activities
-function calculateWeeklyStats(activities: ActivityType[]): Partial<DashboardStats> {
-  const weekStart = startOfWeek(new Date(), { weekStartsOn: 1 });
-  const weekActivities = activities.filter(
-    (a) => new Date(a.date) >= weekStart
-  );
-
-  const weeklyDistance = weekActivities.reduce((sum, a) => sum + (a.distance_meters || 0), 0);
-  const weeklyTime = weekActivities.reduce((sum, a) => sum + (a.duration_seconds || 0), 0);
-
-  // Calculate TSS for each activity if power data is available
-  // TSS = (duration × NP × IF) / (FTP × 3600) × 100
-  // Simplified: using average power as proxy for NP
-  const weeklyTSS = weekActivities.reduce((sum, a) => {
-    // Use stored TSS if available, otherwise estimate from power
-    if (a.tss) {
-      return sum + a.tss;
-    }
-    if (a.average_power && a.duration_seconds) {
-      // Approximate TSS using duration and intensity
-      const hours = a.duration_seconds / 3600;
-      const intensityFactor = a.normalized_power || a.average_power;
-      // Simplified TSS estimate (assumes FTP ~= average power for tempo ride)
-      return sum + Math.round(hours * intensityFactor * 0.3);
-    }
-    return sum;
-  }, 0);
-
-  return {
-    weeklyDistance,
-    weeklyTime,
-    weeklyTSS,
-    weeklyActivities: weekActivities.length,
-  };
 }
 
 // Transform fitness metrics to chart data
@@ -114,39 +78,59 @@ export default function Dashboard() {
   const [syncMessage, setSyncMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  // Fetch activities from API
-  const fetchActivities = useCallback(async () => {
+  // Fetch dashboard data from summary endpoint (single optimized request)
+  const fetchDashboardData = useCallback(async () => {
     try {
       setLoadingActivities(true);
+      setLoadingMetrics(true);
       setError(null);
-      const response = await apiGet<ActivityType[]>(endpoints.activities.list, { limit: 50 });
-      setActivities(response.data);
 
-      // Calculate weekly stats from activities
-      const weeklyStats = calculateWeeklyStats(response.data);
+      const response = await apiGet<DashboardSummaryResponse>(endpoints.dashboard.summary);
+      const data = response.data;
+
+      // Convert recent_activities to ActivityType format for display
+      const recentActivities: ActivityType[] = data.recent_activities.map((a) => ({
+        id: a.id,
+        strava_id: 0,
+        user_id: 0,
+        name: a.name,
+        activity_type: a.activity_type,
+        date: a.date,
+        duration_seconds: a.duration_seconds,
+        distance_meters: a.distance_meters ?? undefined,
+        tss: a.tss ?? undefined,
+        average_power: a.average_power ?? undefined,
+        average_hr: a.average_hr ?? undefined,
+        created_at: a.date,
+      }));
+      setActivities(recentActivities);
+
+      // Update dashboard stats from summary response
       setDashboardStats({
-        weeklyDistance: weeklyStats.weeklyDistance || 0,
-        weeklyTime: weeklyStats.weeklyTime || 0,
-        weeklyTSS: weeklyStats.weeklyTSS || 0,
-        weeklyActivities: weeklyStats.weeklyActivities || 0,
-        currentFitness: dashboardStats?.currentFitness || 0,
-        currentFatigue: dashboardStats?.currentFatigue || 0,
-        currentForm: dashboardStats?.currentForm || 0,
-        formTrend: dashboardStats?.formTrend || 'stable',
-        recentPRs: dashboardStats?.recentPRs || [],
+        weeklyDistance: data.weekly.distance_meters,
+        weeklyTime: data.weekly.duration_seconds,
+        weeklyTSS: data.weekly.tss,
+        weeklyActivities: data.weekly.activity_count,
+        currentFitness: Math.round(data.fitness.ctl),
+        currentFatigue: Math.round(data.fitness.atl),
+        currentForm: Math.round(data.fitness.tsb),
+        formTrend: 'stable', // Trend calculation would need historical data
+        ftpEstimate: data.ftp ?? user?.ftp,
+        recentPRs: [],
       });
+
     } catch (err) {
-      console.error('Failed to fetch activities:', err);
-      setError('Failed to load activities');
+      console.error('Failed to fetch dashboard data:', err);
+      setError('Failed to load dashboard');
     } finally {
       setLoadingActivities(false);
+      setLoadingMetrics(false);
     }
-  }, [setActivities, setLoadingActivities, setDashboardStats, dashboardStats]);
+  }, [setActivities, setLoadingActivities, setLoadingMetrics, setDashboardStats, user?.ftp]);
 
-  // Fetch fitness metrics from API
+  // Fetch fitness metrics for chart (still needed separately for chart data)
   const fetchMetrics = useCallback(async () => {
     try {
-      setLoadingMetrics(true);
       const response = await apiGet<FitnessMetric[]>(endpoints.fitness.history, {
         from_date: format(subDays(new Date(), 90), 'yyyy-MM-dd'),
         to_date: format(new Date(), 'yyyy-MM-dd'),
@@ -154,32 +138,22 @@ export default function Dashboard() {
       });
       setMetrics(response.data);
 
-      // Update current fitness stats from latest metric
-      if (response.data.length > 0) {
+      // Update trend from historical data if we have enough
+      if (response.data.length > 7) {
         const latest = response.data[0];
-        const previous = response.data.length > 7 ? response.data[7] : latest;
+        const previous = response.data[7];
         const trend = latest.tsb > previous.tsb ? 'improving' : latest.tsb < previous.tsb ? 'declining' : 'stable';
 
         setDashboardStats({
-          weeklyDistance: dashboardStats?.weeklyDistance || 0,
-          weeklyTime: dashboardStats?.weeklyTime || 0,
-          weeklyTSS: dashboardStats?.weeklyTSS || 0,
-          weeklyActivities: dashboardStats?.weeklyActivities || 0,
-          currentFitness: Math.round(latest.ctl),
-          currentFatigue: Math.round(latest.atl),
-          currentForm: Math.round(latest.tsb),
+          ...dashboardStats!,
           formTrend: trend,
-          ftpEstimate: user?.ftp,
-          recentPRs: dashboardStats?.recentPRs || [],
         });
       }
     } catch (err) {
-      console.error('Failed to fetch metrics:', err);
-      // Don't show error for metrics - they might not exist yet
-    } finally {
-      setLoadingMetrics(false);
+      console.error('Failed to fetch metrics for chart:', err);
+      // Silent fail - chart data is secondary
     }
-  }, [setMetrics, setLoadingMetrics, setDashboardStats, user?.ftp]);
+  }, [setMetrics, setDashboardStats, dashboardStats]);
 
   // Fetch upcoming workouts
   const fetchWorkouts = useCallback(async () => {
@@ -203,9 +177,9 @@ export default function Dashboard() {
 
       setSyncMessage(`Synced ${response.data.total_synced} activities (${response.data.new_activities} new, ${response.data.updated_activities} updated)`);
 
-      // Refresh activities and metrics after sync
-      await fetchActivities();
-      await fetchMetrics();
+      // Refresh dashboard data after sync
+      await fetchDashboardData();
+      await fetchMetrics(); // Refresh chart data
     } catch (err: unknown) {
       console.error('Failed to sync activities:', err);
       const errorMessage = err instanceof Error ? err.message : 'Failed to sync with Strava';
@@ -219,10 +193,10 @@ export default function Dashboard() {
 
   // Load data on mount
   useEffect(() => {
-    fetchActivities();
-    fetchMetrics();
+    fetchDashboardData();
+    fetchMetrics(); // Separate call for chart data
     fetchWorkouts();
-  }, [fetchActivities, fetchMetrics, fetchWorkouts]);
+  }, [fetchDashboardData, fetchMetrics, fetchWorkouts]);
 
   // Get recent activities (top 3)
   const recentActivities = activities.slice(0, 3);

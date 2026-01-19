@@ -207,6 +207,33 @@ export interface DashboardStats {
   recentPRs: PersonalRecord[];
 }
 
+// Dashboard summary API response
+export interface DashboardSummaryResponse {
+  weekly: {
+    distance_meters: number;
+    duration_seconds: number;
+    tss: number;
+    activity_count: number;
+  };
+  fitness: {
+    ctl: number;
+    atl: number;
+    tsb: number;
+  };
+  recent_activities: Array<{
+    id: number;
+    name: string;
+    date: string;
+    duration_seconds: number;
+    distance_meters: number | null;
+    tss: number | null;
+    average_power: number | null;
+    average_hr: number | null;
+    activity_type: string;
+  }>;
+  ftp: number | null;
+}
+
 export interface PersonalRecord {
   id: number;
   type: 'power' | 'speed' | 'distance' | 'duration';

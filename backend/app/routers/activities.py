@@ -12,6 +12,7 @@ from app.models.activity import Activity
 from app.models.user import User
 from app.schemas.activity import ActivityCreate, ActivityResponse, ActivitySyncResponse
 from app.services.auth_service import get_current_user
+from app.services.metrics_service import MetricsService
 
 logger = logging.getLogger(__name__)
 
@@ -126,10 +127,33 @@ async def sync_activities(
             after=int(from_date),
         )
 
+        # Initialize metrics service for TSS calculation
+        metrics_service = MetricsService()
+        user_ftp = current_user.ftp or 200  # Default FTP if not set
+
         new_count = 0
         updated_count = 0
 
         for strava_activity in strava_activities:
+            # Calculate TSS based on available data
+            duration_seconds = strava_activity.get("elapsed_time", 0)
+            average_watts = strava_activity.get("average_watts")
+            weighted_watts = strava_activity.get("weighted_average_watts")
+
+            if average_watts:
+                # Power-based TSS (most accurate)
+                np = weighted_watts or average_watts
+                tss = metrics_service.calculate_tss(
+                    duration_seconds=duration_seconds,
+                    normalized_power=int(np),
+                    ftp=user_ftp
+                )
+            else:
+                # Duration-based estimate (fallback)
+                tss = metrics_service.estimate_tss_from_duration(
+                    duration_seconds=duration_seconds
+                )
+
             # Check if activity already exists
             existing = db.query(Activity).filter(
                 Activity.strava_id == strava_activity["id"]
@@ -139,15 +163,17 @@ async def sync_activities(
                 # Update existing activity
                 existing.name = strava_activity.get("name", "Unnamed Activity")
                 existing.activity_type = strava_activity.get("type", "Ride")
-                existing.duration_seconds = strava_activity.get("elapsed_time", 0)
+                existing.duration_seconds = duration_seconds
                 existing.distance_meters = strava_activity.get("distance")
-                existing.average_power = strava_activity.get("average_watts")
+                existing.average_power = average_watts
+                existing.normalized_power = weighted_watts
                 existing.average_hr = strava_activity.get("average_heartrate")
                 existing.max_hr = strava_activity.get("max_heartrate")
                 existing.elevation_gain = strava_activity.get("total_elevation_gain")
                 existing.average_speed = strava_activity.get("average_speed")
                 existing.max_speed = strava_activity.get("max_speed")
                 existing.calories = strava_activity.get("calories")
+                existing.tss = tss  # Update TSS
                 updated_count += 1
             else:
                 # Create new activity
@@ -157,20 +183,31 @@ async def sync_activities(
                     name=strava_activity.get("name", "Unnamed Activity"),
                     activity_type=strava_activity.get("type", "Ride"),
                     date=datetime.fromisoformat(strava_activity["start_date"].replace("Z", "+00:00")),
-                    duration_seconds=strava_activity.get("elapsed_time", 0),
+                    duration_seconds=duration_seconds,
                     distance_meters=strava_activity.get("distance"),
-                    average_power=strava_activity.get("average_watts"),
+                    average_power=average_watts,
+                    normalized_power=weighted_watts,
                     average_hr=strava_activity.get("average_heartrate"),
                     max_hr=strava_activity.get("max_heartrate"),
                     elevation_gain=strava_activity.get("total_elevation_gain"),
                     average_speed=strava_activity.get("average_speed"),
                     max_speed=strava_activity.get("max_speed"),
                     calories=strava_activity.get("calories"),
+                    tss=tss,  # Set TSS
                 )
                 db.add(activity)
                 new_count += 1
 
         db.commit()
+
+        # Auto-recalculate fitness metrics (CTL/ATL/TSB) after sync
+        logger.info(f"Recalculating fitness metrics for user {current_user.id}")
+        metrics_service.calculate_fitness_history(
+            db=db,
+            user_id=current_user.id,
+            days=90,
+            recalculate=True
+        )
 
         logger.info(f"Sync complete: {new_count} new, {updated_count} updated activities")
 

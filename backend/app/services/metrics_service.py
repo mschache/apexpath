@@ -265,6 +265,40 @@ class MetricsService:
         """
         return round(ctl - atl, 1)
 
+    def estimate_tss_from_duration(
+        self,
+        duration_seconds: int,
+        intensity: str = "endurance"
+    ) -> float:
+        """
+        Estimate TSS from duration when no power data is available.
+
+        Uses typical TSS values per hour based on intensity:
+        - 1 hour of endurance riding = ~50 TSS
+        - 1 hour of recovery = ~30 TSS
+        - 1 hour of tempo = ~70 TSS
+        - 1 hour of threshold = ~100 TSS
+
+        Args:
+            duration_seconds: Total duration of the workout in seconds
+            intensity: Intensity level ("recovery", "endurance", "tempo", "threshold")
+
+        Returns:
+            Estimated TSS as a float
+        """
+        if duration_seconds <= 0:
+            return 0.0
+
+        intensity_factors = {
+            "recovery": 30,
+            "endurance": 50,
+            "tempo": 70,
+            "threshold": 100,
+        }
+        tss_per_hour = intensity_factors.get(intensity.lower(), 50)
+        hours = duration_seconds / 3600
+        return round(hours * tss_per_hour, 1)
+
     def estimate_tss_from_hr(
         self,
         duration_seconds: int,
