@@ -36,5 +36,13 @@ def get_db():
 def create_tables():
     """Create all database tables."""
     # Import all models to ensure they are registered with Base
-    from app.models import User, Activity, FitnessMetric, TrainingPlan, PlannedWorkout  # noqa: F401
+    from app.models import (  # noqa: F401
+        User,
+        Activity,
+        FitnessMetric,
+        TrainingPlan,
+        PlannedWorkout,
+        FitnessSignature,
+        TrainingLoadRecord,
+    )
     Base.metadata.create_all(bind=engine)

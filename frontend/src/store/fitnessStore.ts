@@ -57,7 +57,7 @@ interface FitnessState {
   setLoadingWorkouts: (loading: boolean) => void;
 
   // Actions - Dashboard
-  setDashboardStats: (stats: DashboardStats | null) => void;
+  setDashboardStats: (statsOrUpdater: DashboardStats | null | ((prev: DashboardStats | null) => DashboardStats | null)) => void;
 
   // Actions - Reset
   resetState: () => void;
@@ -167,7 +167,11 @@ export const useFitnessStore = create<FitnessState>()((set) => ({
   setLoadingWorkouts: (isLoadingWorkouts) => set({ isLoadingWorkouts }),
 
   // Dashboard
-  setDashboardStats: (dashboardStats) => set({ dashboardStats }),
+  setDashboardStats: (statsOrUpdater) => set((state) => ({
+    dashboardStats: typeof statsOrUpdater === 'function'
+      ? statsOrUpdater(state.dashboardStats)
+      : statsOrUpdater,
+  })),
 
   // Reset
   resetState: () => set(initialState),

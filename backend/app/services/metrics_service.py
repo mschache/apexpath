@@ -405,21 +405,19 @@ class MetricsService:
         result_start_date = end_date - timedelta(days=days)
         metrics_list: list[FitnessMetric] = []
 
-        # Get existing metrics if not recalculating
-        existing_metrics: dict[date, FitnessMetric] = {}
-        if not recalculate:
-            existing = (
-                db.query(FitnessMetric)
-                .filter(
-                    and_(
-                        FitnessMetric.user_id == user_id,
-                        FitnessMetric.date >= result_start_date,
-                        FitnessMetric.date <= end_date
-                    )
+        # Always load existing metrics to avoid UNIQUE constraint violations
+        existing = (
+            db.query(FitnessMetric)
+            .filter(
+                and_(
+                    FitnessMetric.user_id == user_id,
+                    FitnessMetric.date >= result_start_date,
+                    FitnessMetric.date <= end_date
                 )
-                .all()
             )
-            existing_metrics = {m.date: m for m in existing}
+            .all()
+        )
+        existing_metrics = {m.date: m for m in existing}
 
         # Calculate metrics for each day
         current_date = result_start_date

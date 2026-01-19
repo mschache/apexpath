@@ -144,16 +144,14 @@ export default function Dashboard() {
         const previous = response.data[7];
         const trend = latest.tsb > previous.tsb ? 'improving' : latest.tsb < previous.tsb ? 'declining' : 'stable';
 
-        setDashboardStats({
-          ...dashboardStats!,
-          formTrend: trend,
-        });
+        // Use functional update to avoid dependency on dashboardStats
+        setDashboardStats((prev) => prev ? { ...prev, formTrend: trend } : prev);
       }
     } catch (err) {
       console.error('Failed to fetch metrics for chart:', err);
       // Silent fail - chart data is secondary
     }
-  }, [setMetrics, setDashboardStats, dashboardStats]);
+  }, [setMetrics, setDashboardStats]);
 
   // Fetch upcoming workouts
   const fetchWorkouts = useCallback(async () => {

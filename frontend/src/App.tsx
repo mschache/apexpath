@@ -1,5 +1,5 @@
 import { Suspense, lazy } from 'react';
-import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 
 // Components (keep these eager - they're needed immediately)
@@ -26,6 +26,7 @@ const CalendarPage = lazy(() => import('./pages/CalendarPage'));
 const Plans = lazy(() => import('./pages/Plans'));
 const WorkoutDetail = lazy(() => import('./pages/WorkoutDetail'));
 const ActivitiesPage = lazy(() => import('./pages/ActivitiesPage'));
+const Profile = lazy(() => import('./pages/Profile'));
 
 // Create a client for React Query
 const queryClient = new QueryClient({
@@ -134,6 +135,11 @@ function App() {
                 </ProtectedRoute>
               }
             />
+            {/* Redirect old AI planner route to plans */}
+            <Route
+              path="/ai-planner"
+              element={<Navigate to="/plans" replace />}
+            />
             <Route
               path="/settings"
               element={
@@ -152,10 +158,7 @@ function App() {
               element={
                 <ProtectedRoute>
                   <Layout>
-                    <div className="text-white">
-                      <h1 className="text-2xl font-bold">Profile</h1>
-                      <p className="text-gray-400 mt-2">Profile page coming soon...</p>
-                    </div>
+                    <Profile />
                   </Layout>
                 </ProtectedRoute>
               }

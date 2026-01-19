@@ -167,6 +167,7 @@ async def strava_callback(
         name = f"{firstname} {lastname}".strip() or None
         profile_image = athlete.get("profile")
         ftp = athlete.get("ftp")
+        weight = athlete.get("weight")  # Weight in kg from Strava
 
         # Find or create user
         user = db.query(User).filter(User.strava_id == strava_id).first()
@@ -179,8 +180,11 @@ async def strava_callback(
             user.strava_access_token = access_token
             user.strava_refresh_token = refresh_token
             user.strava_token_expires_at = expires_at
+            # Sync FTP and weight from Strava (only if set in Strava)
             if ftp:
                 user.ftp = ftp
+            if weight:
+                user.weight_kg = weight
         else:
             # Create new user
             logger.info(f"Creating new user for strava_id={strava_id}")
@@ -189,6 +193,7 @@ async def strava_callback(
                 name=name,
                 profile_image=profile_image,
                 ftp=ftp,
+                weight_kg=weight,
                 strava_access_token=access_token,
                 strava_refresh_token=refresh_token,
                 strava_token_expires_at=expires_at,
@@ -204,14 +209,7 @@ async def strava_callback(
         logger.info(f"Authentication successful for user {user.id}")
 
         return AuthResponse(
-            user=UserResponse(
-                id=user.id,
-                strava_id=user.strava_id,
-                name=user.name,
-                email=user.email,
-                ftp=user.ftp,
-                profile_image=user.profile_image,
-            ),
+            user=UserResponse.model_validate(user),
             token=TokenResponse(
                 access_token=jwt_token,
                 token_type="bearer",
@@ -283,21 +281,14 @@ async def get_current_user_profile(
         Authorization: Bearer eyJ...
         Response: {"id": 1, "strava_id": 12345, "name": "Jane Cyclist", ...}
     """
-    return UserResponse(
-        id=current_user.id,
-        strava_id=current_user.strava_id,
-        name=current_user.name,
-        email=current_user.email,
-        ftp=current_user.ftp,
-        profile_image=current_user.profile_image,
-    )
+    return UserResponse.model_validate(current_user)
 
 
 @router.patch(
     "/me",
     response_model=UserResponse,
     summary="Update current user",
-    description="Update the current user's profile (e.g., FTP).",
+    description="Update the current user's profile including physical attributes and training preferences.",
 )
 async def update_current_user(
     updates: UserUpdate,
@@ -307,7 +298,7 @@ async def update_current_user(
     """
     Update the current user's profile.
 
-    Allows updating fields like FTP that are managed locally.
+    Allows updating fields like FTP, physical attributes, and training preferences.
 
     Args:
         updates: Fields to update
@@ -317,24 +308,42 @@ async def update_current_user(
     Returns:
         UserResponse: The updated user profile
     """
+    # Core fields
     if updates.ftp is not None:
         current_user.ftp = updates.ftp
     if updates.name is not None:
         current_user.name = updates.name
+
+    # Physical attributes
+    if updates.weight_kg is not None:
+        current_user.weight_kg = updates.weight_kg
+    if updates.age is not None:
+        current_user.age = updates.age
+    if updates.max_hr is not None:
+        current_user.max_hr = updates.max_hr
+    if updates.resting_hr is not None:
+        current_user.resting_hr = updates.resting_hr
+
+    # Training profile
+    if updates.experience_level is not None:
+        current_user.experience_level = updates.experience_level
+    if updates.primary_discipline is not None:
+        current_user.primary_discipline = updates.primary_discipline
+    if updates.default_weekly_hours is not None:
+        current_user.default_weekly_hours = updates.default_weekly_hours
+
+    # Equipment
+    if updates.has_power_meter is not None:
+        current_user.has_power_meter = updates.has_power_meter
+    if updates.has_indoor_trainer is not None:
+        current_user.has_indoor_trainer = updates.has_indoor_trainer
 
     db.commit()
     db.refresh(current_user)
 
     logger.info(f"Updated user {current_user.id}")
 
-    return UserResponse(
-        id=current_user.id,
-        strava_id=current_user.strava_id,
-        name=current_user.name,
-        email=current_user.email,
-        ftp=current_user.ftp,
-        profile_image=current_user.profile_image,
-    )
+    return UserResponse.model_validate(current_user)
 
 
 @router.post(
@@ -419,6 +428,94 @@ async def logout(
     # - Invalidate refresh tokens
     # - Clear server-side sessions
     return None
+
+
+@router.post(
+    "/strava/sync",
+    response_model=UserResponse,
+    summary="Sync profile from Strava",
+    description="Fetch the latest athlete data from Strava and update the user's profile (weight, FTP).",
+)
+async def sync_from_strava(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> UserResponse:
+    """
+    Sync profile data from Strava.
+
+    Fetches the authenticated user's athlete profile from Strava and updates
+    their local profile with weight and FTP (if available in Strava).
+
+    Args:
+        current_user: The authenticated user
+        db: Database session
+
+    Returns:
+        UserResponse: The updated user profile
+
+    Raises:
+        HTTPException: 500 if Strava API call fails
+    """
+    try:
+        # Ensure we have a valid access token
+        access_token = current_user.strava_access_token
+        if current_user.is_token_expired:
+            logger.info(f"Refreshing expired Strava token for user {current_user.id}")
+            token_response = await strava_service.refresh_tokens(
+                current_user.strava_refresh_token
+            )
+            access_token = token_response["access_token"]
+            current_user.strava_access_token = token_response["access_token"]
+            current_user.strava_refresh_token = token_response["refresh_token"]
+            current_user.strava_token_expires_at = token_response["expires_at"]
+
+        # Fetch athlete data from Strava
+        logger.info(f"Syncing Strava data for user {current_user.id}")
+        athlete = await strava_service.get_athlete(access_token)
+
+        # Update profile with Strava data
+        updated_fields = []
+
+        ftp = athlete.get("ftp")
+        if ftp:
+            current_user.ftp = ftp
+            updated_fields.append(f"ftp={ftp}")
+
+        weight = athlete.get("weight")
+        if weight:
+            current_user.weight_kg = weight
+            updated_fields.append(f"weight_kg={weight}")
+
+        # Update name if changed
+        firstname = athlete.get("firstname", "")
+        lastname = athlete.get("lastname", "")
+        name = f"{firstname} {lastname}".strip() or None
+        if name and name != current_user.name:
+            current_user.name = name
+            updated_fields.append(f"name={name}")
+
+        # Update profile image if changed
+        profile_image = athlete.get("profile")
+        if profile_image and profile_image != current_user.profile_image:
+            current_user.profile_image = profile_image
+            updated_fields.append("profile_image")
+
+        db.commit()
+        db.refresh(current_user)
+
+        if updated_fields:
+            logger.info(f"Synced Strava data for user {current_user.id}: {', '.join(updated_fields)}")
+        else:
+            logger.info(f"No new data to sync from Strava for user {current_user.id}")
+
+        return UserResponse.model_validate(current_user)
+
+    except StravaAPIError as e:
+        logger.error(f"Failed to sync from Strava: {e.message}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to sync from Strava: {e.message}",
+        )
 
 
 @router.get(

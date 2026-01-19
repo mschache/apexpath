@@ -21,6 +21,10 @@ class Settings(BaseSettings):
     JWT_ALGORITHM: str = "HS256"
     JWT_ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 24 * 7  # 7 days
 
+    # Google Gemini AI
+    GEMINI_API_KEY: str = ""
+    GEMINI_MODEL: str = "gemini-1.5-flash"  # gemini-1.5-flash or gemini-1.5-pro
+
     # Aliases for compatibility with auth_service
     @property
     def SECRET_KEY(self) -> str:

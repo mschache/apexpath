@@ -28,8 +28,8 @@ interface NavItem {
 
 const navItems: NavItem[] = [
   { path: '/', label: 'Dashboard', icon: <LayoutDashboard size={20} /> },
-  { path: '/calendar', label: 'Calendar', icon: <Calendar size={20} /> },
   { path: '/plans', label: 'Training Plans', icon: <ClipboardList size={20} /> },
+  { path: '/calendar', label: 'Calendar', icon: <Calendar size={20} /> },
   { path: '/activities', label: 'Activities', icon: <Activity size={20} /> },
   { path: '/analytics', label: 'Analytics', icon: <TrendingUp size={20} /> },
 ];
@@ -156,9 +156,6 @@ export default function Layout({ children }: LayoutProps) {
                   <p className="text-sm font-medium text-white">
                     {user?.name || 'Athlete'}
                   </p>
-                  {user?.ftp && (
-                    <p className="text-xs text-gray-400">FTP: {user.ftp}W</p>
-                  )}
                 </div>
                 <ChevronDown
                   size={16}
