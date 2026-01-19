@@ -30,7 +30,7 @@ import { useAuthStore } from '../store/authStore';
 import { useFitnessStore } from '../store/fitnessStore';
 import { apiGet, apiPost, endpoints } from '../utils/api';
 import { format, formatDistanceToNow, subDays } from 'date-fns';
-import type { Activity as ActivityType, FitnessMetric, PlannedWorkout, DashboardStats, FitnessChartData, DashboardSummaryResponse } from '../types';
+import type { Activity as ActivityType, FitnessMetric, PlannedWorkout, FitnessChartData, DashboardSummaryResponse } from '../types';
 
 function formatDuration(seconds: number): string {
   const hours = Math.floor(seconds / 3600);
