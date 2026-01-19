@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Download, X, Loader2, Check } from 'lucide-react';
-import type { PlannedWorkout, CyclingPlatform, ExportFormat } from '../types';
+import type { PlannedWorkout, CyclingPlatform } from '../types';
 import { CYCLING_PLATFORMS } from '../types';
 import { useAuthStore } from '../store/authStore';
 import api, { endpoints } from '../utils/api';
