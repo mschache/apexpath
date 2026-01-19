@@ -26,6 +26,7 @@ app = FastAPI(
     description="Backend API for the Cycling Trainer App - Strava integration, training plans, and fitness tracking",
     version="1.0.0",
     lifespan=lifespan,
+    redirect_slashes=False,  # Prevent 307 redirects that break CORS
 )
 
 # Configure CORS - allow multiple origins for development and production
